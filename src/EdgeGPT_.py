@@ -26,6 +26,8 @@ from prompt_toolkit.history import InMemoryHistory
 from rich.live import Live
 from rich.markdown import Markdown
 
+from colorama import init, Fore, Style
+
 DELIMITER = "\x1e"
 
 
@@ -335,9 +337,7 @@ class Chatbot:
         Ask a question to the bot
         """
         async for final, response in self.chat_hub.ask_stream(
-            prompt=prompt,
-            conversation_style=conversation_style,
-            wss_link=wss_link
+            prompt=prompt, conversation_style=conversation_style, wss_link=wss_link
         ):
             if final:
                 return response
@@ -353,9 +353,7 @@ class Chatbot:
         Ask a question to the bot
         """
         async for response in self.chat_hub.ask_stream(
-            prompt=prompt,
-            conversation_style=conversation_style,
-            wss_link=wss_link
+            prompt=prompt, conversation_style=conversation_style, wss_link=wss_link
         ):
             yield response
 
@@ -396,16 +394,25 @@ async def main():
     Main function
     """
     print("Initializing...")
-    print("Enter `alt+enter` or `escape+enter` to send a message")
+    print(
+        "Enter `alt+enter` or `escape+enter` to send a message, !reset - Reset the conversation"
+    )
     bot = Chatbot(proxy=args.proxy)
     session = create_session()
     while True:
-        print("\nYou:")
+        print(Fore.YELLOW + ">", Style.BRIGHT + Fore.RESET + Style.RESET_ALL, end="")
+        # print("\nYou:")
         if not args.enter_once:
             question = await get_input_async(session=session)
         else:
+            print(Fore.GREEN + Style.BRIGHT + "", end="")
+            # question = (
+            #     "be concise. don't say hello. only add additional context or links if asked to."
+            #     + input()
+            # )
             question = input()
-        print()
+            print(Fore.RESET + Style.RESET_ALL, "", end="")
+        # print()
         if question == "!exit":
             break
         elif question == "!help":
@@ -420,12 +427,18 @@ async def main():
         elif question == "!reset":
             await bot.reset()
             continue
-        print("Bot:")
+        # print("Bot:")
+        # print("\n")
+
         if args.no_stream:
             print(
-                (await bot.ask(prompt=question, conversation_style=args.style,wss_link=args.wss_link))["item"][
-                    "messages"
-                ][1]["adaptiveCards"][0]["body"][0]["text"],
+                (
+                    await bot.ask(
+                        prompt=question,
+                        conversation_style=args.style,
+                        wss_link=args.wss_link,
+                    )
+                )["item"]["messages"][1]["adaptiveCards"][0]["body"][0]["text"],
             )
         else:
             if args.rich:
@@ -435,7 +448,7 @@ async def main():
                     async for final, response in bot.ask_stream(
                         prompt=question,
                         conversation_style=args.style,
-                        wss_link=args.wss_link
+                        wss_link=args.wss_link,
                     ):
                         if not final:
                             if wrote > len(response):
@@ -449,7 +462,7 @@ async def main():
                 async for final, response in bot.ask_stream(
                     prompt=question,
                     conversation_style=args.style,
-                    wss_link=args.wss_link
+                    wss_link=args.wss_link,
                 ):
                     if not final:
                         print(response[wrote:], end="", flush=True)
@@ -459,17 +472,17 @@ async def main():
 
 
 if __name__ == "__main__":
-    print(
-        """
-        EdgeGPT - A demo of reverse engineering the Bing GPT chatbot
-        Repo: github.com/acheong08/EdgeGPT
-        By: Antonio Cheong
+    # print(
+    #     """
+    #     EdgeGPT - A demo of reverse engineering the Bing GPT chatbot
+    #     Repo: github.com/acheong08/EdgeGPT
+    #     By: Antonio Cheong
 
-        !help for help
+    #     !help for help
 
-        Type !exit to exit
-    """,
-    )
+    #     Type !exit to exit
+    # """,
+    # )
     parser = argparse.ArgumentParser()
     parser.add_argument("--enter-once", action="store_true")
     parser.add_argument("--no-stream", action="store_true")
@@ -478,7 +491,10 @@ if __name__ == "__main__":
         "--proxy", help="Proxy URL (e.g. socks5://127.0.0.1:1080)", type=str
     )
     parser.add_argument(
-        "--wss-link", help="WSS URL(e.g. wss://sydney.bing.com/sydney/ChatHub)",type=str,default="wss://sydney.bing.com/sydney/ChatHub"
+        "--wss-link",
+        help="WSS URL(e.g. wss://sydney.bing.com/sydney/ChatHub)",
+        type=str,
+        default="wss://sydney.bing.com/sydney/ChatHub",
     )
     parser.add_argument(
         "--style",
