@@ -1,6 +1,3 @@
-"""
-Main.py
-"""
 from __future__ import annotations
 
 import argparse
@@ -522,6 +519,6 @@ if __name__ == "__main__":
         parser.print_help()
         parser.exit(
             1,
-            "ERROR: use --cookied-file or set environemnt variable COOKIE_FILE",
+            "ERROR: use --cookie-file or set environemnt variable COOKIE_FILE",
         )
     asyncio.run(main())
