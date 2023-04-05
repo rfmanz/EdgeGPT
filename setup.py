@@ -1,9 +1,18 @@
+from pathlib import Path
+
 from setuptools import find_packages
 from setuptools import setup
 
+DOCS_PATH = Path(__file__).parents[0] / "docs/README.md"
+PATH = Path("README.md")
+if not PATH.exists():
+    with open(DOCS_PATH, encoding="utf-8") as f1:
+        with open(PATH, "w+", encoding="utf-8") as f2:
+            f2.write(f1.read())
+
 setup(
     name="EdgeGPT",
-    version="0.1.11",
+    version="0.1.22.1",
     license="GNU General Public License v2.0",
     author="Antonio Cheong",
     author_email="acheong@student.dalat.org",
@@ -20,6 +29,7 @@ setup(
         "prompt_toolkit",
         "regex",
         "requests",
+        "BingImageCreator>=0.1.1.1",
     ],
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",

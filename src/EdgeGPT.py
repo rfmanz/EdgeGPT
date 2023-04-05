@@ -78,7 +78,7 @@ HEADERS_INIT_CONVER = {
     "upgrade-insecure-requests": "1",
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36 Edg/110.0.1587.69",
     "x-edge-shopping-flag": "1",
-    "x-forwarded-for": "1.1.1.1",
+    "x-forwarded-for": FORWARDED_IP,
 }
 
 ssl_context = ssl.create_default_context()
@@ -106,6 +106,13 @@ def append_identifier(msg: dict) -> str:
     """
     # Convert dict to json string
     return json.dumps(msg) + DELIMITER
+
+
+def get_ran_hex(length: int = 32) -> str:
+    """
+    Returns random hex string
+    """
+    return "".join(random.choice("0123456789abcdef") for _ in range(length))
 
 
 class ChatHubRequest:
@@ -147,17 +154,28 @@ class ChatHubRequest:
             if not isinstance(conversation_style, ConversationStyle):
                 conversation_style = getattr(ConversationStyle, conversation_style)
             options = [
+                "nlu_direct_response_filter",
                 "deepleo",
-                "enable_debug_commands",
                 "disable_emoji_spoken_text",
+                "responsible_ai_policy_235",
                 "enablemm",
                 conversation_style.value,
+                "dtappid",
+                "cricinfo",
+                "cricinfov2",
+                "dv3sugg",
             ]
         self.struct = {
             "arguments": [
                 {
                     "source": "cib",
                     "optionsSets": options,
+                    "sliceIds": [
+                        "222dtappid",
+                        "225cricinfo",
+                        "224locals0",
+                    ],
+                    "traceId": get_ran_hex(32),
                     "isStartOfSession": self.invocation_id == 0,
                     "message": {
                         "author": "user",
@@ -216,25 +234,25 @@ class Conversation:
         # Send GET request
         response = self.session.get(
             url=os.environ.get("BING_PROXY_URL")
-            or "https://edgeservices.bing.com/edgesvc/turing/conversation/create"
+            or "https://edgeservices.bing.com/edgesvc/turing/conversation/create",
         )
         if response.status_code != 200:
             response = self.session.get(
-                "https://edge.churchless.tech/edgesvc/turing/conversation/create"
+                "https://edge.churchless.tech/edgesvc/turing/conversation/create",
             )
-            if response.status_code != 200:
-                print(f"Status code: {response.status_code}")
-                print(response.text)
-                print(response.url)
-                raise Exception("Authentication failed")
+        if response.status_code != 200:
+            print(f"Status code: {response.status_code}")
+            print(response.text)
+            print(response.url)
+            raise Exception("Authentication failed")
         try:
             self.struct = response.json()
-            if self.struct["result"]["value"] == "UnauthorizedRequest":
-                raise NotAllowedToAccess(self.struct["result"]["message"])
         except (json.decoder.JSONDecodeError, NotAllowedToAccess) as exc:
             raise Exception(
                 "Authentication failed. You have not been accepted into the beta.",
             ) from exc
+        if self.struct["result"]["value"] == "UnauthorizedRequest":
+            raise NotAllowedToAccess(self.struct["result"]["message"])
 
 
 class ChatHub:
@@ -262,9 +280,8 @@ class ChatHub:
         """
         Ask a question to the bot
         """
-        if self.wss:
-            if not self.wss.closed:
-                await self.wss.close()
+        if self.wss and not self.wss.closed:
+            await self.wss.close()
         # Check if websocket is closed
         self.wss = await websockets.connect(
             wss_link,
@@ -281,7 +298,7 @@ class ChatHub:
         while not final:
             objects = str(await self.wss.recv()).split(DELIMITER)
             for obj in objects:
-                if obj is None or obj == "":
+                if obj is None or not obj:
                     continue
                 response = json.loads(obj)
                 if response.get("type") == 1 and response["arguments"][0].get(
@@ -295,11 +312,11 @@ class ChatHub:
                     final = True
                     yield True, response
 
-    async def __initial_handshake(self):
+    async def __initial_handshake(self) -> None:
         await self.wss.send(append_identifier({"protocol": "json", "version": 1}))
         await self.wss.recv()
 
-    async def close(self):
+    async def close(self) -> None:
         """
         Close the connection
         """
@@ -322,7 +339,7 @@ class Chatbot:
         self.cookies: dict | None = cookies
         self.proxy: str | None = proxy
         self.chat_hub: ChatHub = ChatHub(
-            Conversation(self.cookiePath, self.cookies, self.proxy)
+            Conversation(self.cookiePath, self.cookies, self.proxy),
         )
 
     async def ask(
@@ -337,11 +354,12 @@ class Chatbot:
         async for final, response in self.chat_hub.ask_stream(
             prompt=prompt,
             conversation_style=conversation_style,
-            wss_link=wss_link
+            wss_link=wss_link,
         ):
             if final:
                 return response
-        self.chat_hub.wss.close()
+        await self.chat_hub.wss.close()
+        return None
 
     async def ask_stream(
         self,
@@ -355,17 +373,17 @@ class Chatbot:
         async for response in self.chat_hub.ask_stream(
             prompt=prompt,
             conversation_style=conversation_style,
-            wss_link=wss_link
+            wss_link=wss_link,
         ):
             yield response
 
-    async def close(self):
+    async def close(self) -> None:
         """
         Close the connection
         """
         await self.chat_hub.close()
 
-    async def reset(self):
+    async def reset(self) -> None:
         """
         Reset the conversation
         """
@@ -391,7 +409,7 @@ def create_session() -> PromptSession:
     return PromptSession(history=InMemoryHistory())
 
 
-async def main():
+async def main() -> None:
     """
     Main function
     """
@@ -401,14 +419,13 @@ async def main():
     session = create_session()
     while True:
         print("\nYou:")
-        if not args.enter_once:
-            question = await get_input_async(session=session)
-        else:
-            question = input()
+        question = (
+            input() if args.enter_once else await get_input_async(session=session)
+        )
         print()
         if question == "!exit":
             break
-        elif question == "!help":
+        if question == "!help":
             print(
                 """
             !help - Show this help message
@@ -417,25 +434,29 @@ async def main():
             """,
             )
             continue
-        elif question == "!reset":
+        if question == "!reset":
             await bot.reset()
             continue
         print("Bot:")
         if args.no_stream:
             print(
-                (await bot.ask(prompt=question, conversation_style=args.style,wss_link=args.wss_link))["item"][
-                    "messages"
-                ][1]["adaptiveCards"][0]["body"][0]["text"],
+                (
+                    await bot.ask(
+                        prompt=question,
+                        conversation_style=args.style,
+                        wss_link=args.wss_link,
+                    )
+                )["item"]["messages"][1]["adaptiveCards"][0]["body"][0]["text"],
             )
         else:
+            wrote = 0
             if args.rich:
-                wrote = 0
                 md = Markdown("")
                 with Live(md, auto_refresh=False) as live:
                     async for final, response in bot.ask_stream(
                         prompt=question,
                         conversation_style=args.style,
-                        wss_link=args.wss_link
+                        wss_link=args.wss_link,
                     ):
                         if not final:
                             if wrote > len(response):
@@ -445,11 +466,10 @@ async def main():
                             md = Markdown(response)
                             live.update(md, refresh=True)
             else:
-                wrote = 0
                 async for final, response in bot.ask_stream(
                     prompt=question,
                     conversation_style=args.style,
-                    wss_link=args.wss_link
+                    wss_link=args.wss_link,
                 ):
                     if not final:
                         print(response[wrote:], end="", flush=True)
@@ -475,10 +495,15 @@ if __name__ == "__main__":
     parser.add_argument("--no-stream", action="store_true")
     parser.add_argument("--rich", action="store_true")
     parser.add_argument(
-        "--proxy", help="Proxy URL (e.g. socks5://127.0.0.1:1080)", type=str
+        "--proxy",
+        help="Proxy URL (e.g. socks5://127.0.0.1:1080)",
+        type=str,
     )
     parser.add_argument(
-        "--wss-link", help="WSS URL(e.g. wss://sydney.bing.com/sydney/ChatHub)",type=str,default="wss://sydney.bing.com/sydney/ChatHub"
+        "--wss-link",
+        help="WSS URL(e.g. wss://sydney.bing.com/sydney/ChatHub)",
+        type=str,
+        default="wss://sydney.bing.com/sydney/ChatHub",
     )
     parser.add_argument(
         "--style",
@@ -498,6 +523,7 @@ if __name__ == "__main__":
     else:
         parser.print_help()
         parser.exit(
-            1, "ERROR: use --cookied-file or set environemnt variable COOKIE_FILE"
+            1,
+            "ERROR: use --cookied-file or set environemnt variable COOKIE_FILE",
         )
     asyncio.run(main())
