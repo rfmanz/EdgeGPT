@@ -22,6 +22,9 @@ import httpx
 import websockets.client as websockets
 from prompt_toolkit import PromptSession
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+from prompt_toolkit.auto_suggest import ThreadedAutoSuggest
+
+from prompt_toolkit.auto_suggest import SmartAutoSuggest
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.history import InMemoryHistory
 from rich.live import Live
@@ -397,20 +400,6 @@ class Chatbot:
         self.chat_hub = ChatHub(Conversation(self.cookiePath, self.cookies))
 
 
-# async def get_input_async(
-#     session: PromptSession = None,
-#     completer: WordCompleter = None,
-# ) -> str:
-#     """
-#     Multiline input function.
-#     """
-#     return await session.prompt_async(
-#         completer=completer,
-#         multiline=True,
-#         auto_suggest=AutoSuggestFromHistory(),
-#         style= Style_pk.from_dict({"":"#00ff00"}))
-
-
 async def get_input_async(
     session: PromptSession = None,
     completer: WordCompleter = None,
@@ -418,13 +407,30 @@ async def get_input_async(
     """
     Multiline input function.
     """
+
     return await session.prompt_async(
-        message=FormattedText([("fg:yellow", "> ")]),
+        message=FormattedText(
+            [
+                ("#8B0000", f"{get_counter()}"),
+                ("fg:yellow", "\n> "),
+            ]
+        ),
         completer=completer,
         multiline=True,
         auto_suggest=AutoSuggestFromHistory(),
+        # auto_suggest=ThreadedAutoSuggest(SmartAutoSuggest()),
         style=Style_pk.from_dict({"": "#00ff00"}),
+        complete_while_typing=True,
     )
+
+
+question_counter = 0
+
+
+def get_counter() -> int:
+    global question_counter
+    question_counter += 1
+    return question_counter
 
 
 def create_session() -> PromptSession:
@@ -440,80 +446,179 @@ async def main() -> None:
         print("Enter `alt+enter` or `escape+enter` to send a message")
     bot = Chatbot(proxy=args.proxy)
     session = create_session()
+    question_counter = 0
+
     while True:
-        if args.enter_once:
-            print(
-                Fore.YELLOW + ">", Style.BRIGHT + Fore.RESET + Style.RESET_ALL, end=""
-            )
-            print(Fore.GREEN + Style.BRIGHT + "", end="")
-            question = input()
-            print(Fore.RESET + Style.RESET_ALL, "", end="")
-        else:
-            question = await get_input_async(session=session)
+        try:
+            if args.enter_once:
+                print(
+                    Fore.YELLOW + f"{question_counter}" + "\n>",
+                    Style.BRIGHT + Fore.RESET + Style.RESET_ALL,
+                    end="",
+                )
+                print(Fore.GREEN + Style.BRIGHT + "", end="")
 
-        # print("\nYou:")
+                question = input()
+                question_counter += 1
 
-        # Is there anything else you would like to know?
-        # question = (
-        # input() if args.enter_once else await get_input_async(session=session)
-        # )
-        # print()
-        if question == "!exit":
-            break
-        if question == "!help":
-            print(
-                """
-            !help - Show this help message
-            !exit - Exit the program
-            !reset - Reset the conversation
-            """,
-            )
-            continue
-        if question == "!reset":
-            await bot.reset()
-            continue
+                print(Fore.RESET + Style.RESET_ALL, "", end="")
+            else:
+                question = await get_input_async(session=session)
 
-        print()
-        # print("Bot:")
-        if args.no_stream:
-            print(
-                (
-                    await bot.ask(
-                        prompt=question,
-                        conversation_style=args.style,
-                        wss_link=args.wss_link,
-                    )
-                )["item"]["messages"][1]["adaptiveCards"][0]["body"][0]["text"],
-            )
-        else:
-            wrote = 0
-            if args.rich:
-                md = Markdown("")
-                with Live(md, auto_refresh=False) as live:
+            if question == "!exit":
+                break
+            if question == "!help":
+                print(
+                    """
+                !help - Show this help message
+                !exit - Exit the program
+                !reset - Reset the conversation
+                """,
+                )
+                continue
+            if question == "!reset":
+                await bot.reset()
+                continue
+
+            print()
+            # print("Bot:")
+            if args.no_stream:
+                print(
+                    (
+                        await bot.ask(
+                            prompt=question,
+                            conversation_style=args.style,
+                            wss_link=args.wss_link,
+                        )
+                    )["item"]["messages"][1]["adaptiveCards"][0]["body"][0]["text"],
+                )
+            else:
+                wrote = 0
+                if args.rich:
+                    md = Markdown("")
+                    with Live(md, auto_refresh=False) as live:
+                        async for final, response in bot.ask_stream(
+                            prompt=question,
+                            conversation_style=args.style,
+                            wss_link=args.wss_link,
+                        ):
+                            if not final:
+                                if wrote > len(response):
+                                    print(md)
+                                    print(Markdown("***Bing revoked the response.***"))
+                                wrote = len(response)
+                                md = Markdown(response)
+                                live.update(md, refresh=True)
+                else:
                     async for final, response in bot.ask_stream(
                         prompt=question,
                         conversation_style=args.style,
                         wss_link=args.wss_link,
                     ):
                         if not final:
-                            if wrote > len(response):
-                                print(md)
-                                print(Markdown("***Bing revoked the response.***"))
+                            print(response[wrote:], end="", flush=True)
                             wrote = len(response)
-                            md = Markdown(response)
-                            live.update(md, refresh=True)
-            else:
-                async for final, response in bot.ask_stream(
-                    prompt=question,
-                    conversation_style=args.style,
-                    wss_link=args.wss_link,
-                ):
-                    if not final:
-                        print(response[wrote:], end="", flush=True)
-                        wrote = len(response)
-                print()
+                    print()
+        except KeyboardInterrupt as e:
+            print("Exiting program...")
+            break
+            sys.exit()
     await bot.close()
 
+
+# async def main() -> None:
+#     """
+#     Main function
+#     """
+#     print("Initializing...")
+#     if not args.enter_once:
+#         print("Enter `alt+enter` or `escape+enter` to send a message")
+#     bot = Chatbot(proxy=args.proxy)
+#     session = create_session()
+#     question_counter = 0
+
+#     try:  # add this line
+#         while True:
+#             try:
+#                 if args.enter_once:
+#                     print(
+#                         Fore.YELLOW + f"{question_counter}" + "\n>",
+#                         Style.BRIGHT + Fore.RESET + Style.RESET_ALL,
+#                         end="",
+#                     )
+#                     print(Fore.GREEN + Style.BRIGHT + "", end="")
+
+#                     question = input()
+#                     question_counter += 1
+
+#                     print(Fore.RESET + Style.RESET_ALL, "", end="")
+#                 else:
+#                     question = await get_input_async(session=session)
+
+#                 if question == "!exit":
+#                     break
+#                 if question == "!help":
+#                     print(
+#                         """
+#                     !help - Show this help message
+#                     !exit - Exit the program
+#                     !reset - Reset the conversation
+#                     """,
+#                     )
+#                     continue
+#                 if question == "!reset":
+#                     await bot.reset()
+#                     continue
+
+#                 print()
+#                 # print("Bot:")
+#                 if args.no_stream:
+#                     print(
+#                         (
+#                             await bot.ask(
+#                                 prompt=question,
+#                                 conversation_style=args.style,
+#                                 wss_link=args.wss_link,
+#                             )
+#                         )["item"]["messages"][1]["adaptiveCards"][0]["body"][0]["text"],
+#                     )
+#                 else:
+#                     wrote = 0
+#                     if args.rich:
+#                         md = Markdown("")
+#                         with Live(md, auto_refresh=False) as live:
+#                             async for final, response in bot.ask_stream(
+#                                 prompt=question,
+#                                 conversation_style=args.style,
+#                                 wss_link=args.wss_link,
+#                             ):
+#                                 if not final:
+#                                     if wrote > len(response):
+#                                         print(md)
+#                                         print(
+#                                             Markdown("***Bing revoked the response.***")
+#                                         )
+#                                     wrote = len(response)
+#                                     md = Markdown(response)
+#                                     live.update(md, refresh=True)
+#                     else:
+#                         async for final, response in bot.ask_stream(
+#                             prompt=question,
+#                             conversation_style=args.style,
+#                             wss_link=args.wss_link,
+#                         ):
+#                             if not final:
+#                                 print(response[wrote:], end="", flush=True)
+#                                 wrote = len(response)
+#                         print()
+#             except KeyboardInterrupt as e:  # add this line
+#                 print("Exiting program...")  # add this line
+#                 break  # add this line
+#                 sys.exit()  # add this line
+#         await bot.close()
+#     except KeyboardInterrupt as e:  # add this line
+#         print("Exiting program...")  # add this line
+#         sys.exit()  # add this line
 
 if __name__ == "__main__":
     # print(
