@@ -1,3 +1,4 @@
+# TODO add message count conversation
 """
 Main.py
 """
@@ -26,7 +27,10 @@ from prompt_toolkit.history import InMemoryHistory
 from rich.live import Live
 from rich.markdown import Markdown
 
+
 from colorama import init, Fore, Style
+from prompt_toolkit.formatted_text import FormattedText
+from prompt_toolkit.styles import Style as Style_pk
 
 DELIMITER = "\x1e"
 
@@ -393,6 +397,20 @@ class Chatbot:
         self.chat_hub = ChatHub(Conversation(self.cookiePath, self.cookies))
 
 
+# async def get_input_async(
+#     session: PromptSession = None,
+#     completer: WordCompleter = None,
+# ) -> str:
+#     """
+#     Multiline input function.
+#     """
+#     return await session.prompt_async(
+#         completer=completer,
+#         multiline=True,
+#         auto_suggest=AutoSuggestFromHistory(),
+#         style= Style_pk.from_dict({"":"#00ff00"}))
+
+
 async def get_input_async(
     session: PromptSession = None,
     completer: WordCompleter = None,
@@ -401,7 +419,11 @@ async def get_input_async(
     Multiline input function.
     """
     return await session.prompt_async(
-        completer=completer, multiline=True, auto_suggest=AutoSuggestFromHistory()
+        message=FormattedText([("fg:yellow", "> ")]),
+        completer=completer,
+        multiline=True,
+        auto_suggest=AutoSuggestFromHistory(),
+        style=Style_pk.from_dict({"": "#00ff00"}),
     )
 
 
@@ -419,13 +441,22 @@ async def main() -> None:
     bot = Chatbot(proxy=args.proxy)
     session = create_session()
     while True:
+        if args.enter_once:
+            print(
+                Fore.YELLOW + ">", Style.BRIGHT + Fore.RESET + Style.RESET_ALL, end=""
+            )
+            print(Fore.GREEN + Style.BRIGHT + "", end="")
+            question = input()
+            print(Fore.RESET + Style.RESET_ALL, "", end="")
+        else:
+            question = await get_input_async(session=session)
+
         # print("\nYou:")
-        print(Fore.YELLOW + ">", Style.BRIGHT + Fore.RESET + Style.RESET_ALL, end="")
-        print(Fore.GREEN + Style.BRIGHT + "", end="")
+
         # Is there anything else you would like to know?
-        question = (
-            input() if args.enter_once else await get_input_async(session=session)
-        )
+        # question = (
+        # input() if args.enter_once else await get_input_async(session=session)
+        # )
         # print()
         if question == "!exit":
             break
@@ -441,7 +472,7 @@ async def main() -> None:
         if question == "!reset":
             await bot.reset()
             continue
-        print(Fore.RESET + Style.RESET_ALL, "", end="")
+
         print()
         # print("Bot:")
         if args.no_stream:

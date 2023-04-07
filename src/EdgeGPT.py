@@ -97,6 +97,7 @@ CONVERSATION_STYLE_TYPE = Optional[
 ]
 
 
+
 def append_identifier(msg: dict) -> str:
     """
     Appends special character to end of message to identify end of message
