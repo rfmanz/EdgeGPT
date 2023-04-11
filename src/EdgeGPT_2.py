@@ -1,4 +1,3 @@
-# TODO add message count conversation
 """
 Main.py
 """
@@ -446,13 +445,18 @@ async def main() -> None:
         print("Enter `alt+enter` or `escape+enter` to send a message")
     bot = Chatbot(proxy=args.proxy)
     session = create_session()
-    question_counter = 0
+    question_counter = 1
 
     while True:
         try:
             if args.enter_once:
                 print(
-                    Fore.YELLOW + f"{question_counter}" + "\n>",
+                    Fore.RED + f"{question_counter}",
+                    Fore.RESET + Style.RESET_ALL,
+                    end="",
+                )
+                print(
+                    Fore.YELLOW + "\n>",
                     Style.BRIGHT + Fore.RESET + Style.RESET_ALL,
                     end="",
                 )
