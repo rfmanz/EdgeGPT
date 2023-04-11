@@ -418,7 +418,8 @@ async def get_input_async(
         multiline=True,
         auto_suggest=AutoSuggestFromHistory(),
         # auto_suggest=ThreadedAutoSuggest(SmartAutoSuggest()),
-        style=Style_pk.from_dict({"": "#00ff00"}),
+        # style=Style_pk.from_dict({"": "#00ff00"}),
+        style=Style_pk.from_dict({"": "#FF9900"}),
         complete_while_typing=True,
     )
 
@@ -451,7 +452,7 @@ async def main() -> None:
         try:
             if args.enter_once:
                 print(
-                    Fore.RED + f"{question_counter}",
+                    Fore.LIGHTCYAN_EX + f"{question_counter}",
                     Fore.RESET + Style.RESET_ALL,
                     end="",
                 )
@@ -460,7 +461,9 @@ async def main() -> None:
                     Style.BRIGHT + Fore.RESET + Style.RESET_ALL,
                     end="",
                 )
-                print(Fore.GREEN + Style.BRIGHT + "", end="")
+
+                print(Fore.RED + Style.BRIGHT + "", end="")
+                print(Fore.RED + "", end="")
 
                 question = input()
                 question_counter += 1
